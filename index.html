@@ -1,0 +1,2490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的爱车保养电子账本 - 智能登录云同步版</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #f1f5f9;
+        }
+        /* 滚动条美化 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .batch-checkbox {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #cbd5e1;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
+            position: relative;
+            flex-shrink: 0;
+        }
+        .batch-checkbox:checked {
+            background-color: #4f46e5;
+            border-color: #4f46e5;
+        }
+        .batch-checkbox:checked::after {
+            content: '';
+            position: absolute;
+            left: 4px;
+            top: 1px;
+            width: 6px;
+            height: 10px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+        .batch-action-bar {
+            position: sticky;
+            bottom: 0;
+            background: linear-gradient(to top, white 80%, transparent);
+            padding: 16px 0 8px;
+            z-index: 10;
+        }
+        .pagination-btn {
+            min-width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.15s;
+            border: 1px solid #e2e8f0;
+            background: white;
+            color: #475569;
+            cursor: pointer;
+        }
+        .pagination-btn:hover:not(:disabled) {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+        }
+        .pagination-btn.active {
+            background: #4f46e5;
+            color: white;
+            border-color: #4f46e5;
+        }
+        .pagination-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .validation-error {
+            border-color: #f43f5e !important;
+            box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.15) !important;
+        }
+        .validation-error-msg {
+            color: #f43f5e;
+            font-size: 10px;
+            margin-top: 2px;
+        }
+        .card-selected {
+            border-color: #4f46e5 !important;
+            background: #eef2ff !important;
+        }
+        .recycle-card {
+            opacity: 0.75;
+            border-left: 3px solid #f59e0b;
+        }
+        .log-entry {
+            border-left: 3px solid #e2e8f0;
+            padding-left: 12px;
+            transition: border-color 0.15s;
+        }
+        .log-entry.log-delete { border-left-color: #f43f5e; }
+        .log-entry.log-restore { border-left-color: #10b981; }
+        .log-entry.log-edit { border-left-color: #3b82f6; }
+        .log-entry.log-batch { border-left-color: #f59e0b; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- 导航栏 -->
+    <header class="bg-gradient-to-r from-blue-700 via-indigo-800 to-indigo-900 text-white shadow-lg sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white/10 p-2 rounded-xl text-white backdrop-blur-md shadow-inner">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10M21 16V10a2 2 0 00-2-2h-6" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-wide flex items-center gap-2">
+                        爱车保养电子账本 
+                        <span class="text-[10px] bg-slate-500 text-white px-1.5 py-0.5 rounded font-bold" id="dbStatusBadge">本地极速版</span>
+                    </h1>
+                    <p class="text-[11px] text-blue-200">Personal Car Maintenance Cloud Ledger</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-2 w-full sm:w-auto justify-end">
+                <span class="text-xs bg-black/20 px-3 py-1.5 rounded-xl font-medium truncate max-w-[150px] sm:max-w-[200px]" id="currentCarDisplay">
+                    当前车辆: 载入中...
+                </span>
+                
+                <!-- 管理车辆按钮 -->
+                <button onclick="toggleModal('carModal', true)" class="text-xs bg-white/10 hover:bg-white/20 transition-all px-3 py-1.5 rounded-xl flex items-center space-x-1 font-medium border border-white/10">
+                    <span>管理车辆</span>
+                </button>
+
+                <!-- 设置按钮 (唯一齿轮⚙️入口) -->
+                <button onclick="toggleModal('syncModal', true)" class="p-2 bg-white/10 hover:bg-white/20 transition-all rounded-xl border border-white/10 relative" title="账本同步与智能登录设置">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 应用主体 -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full">
+
+        <!-- 只读模式顶部条 -->
+        <div id="readOnlyBanner" class="hidden bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="bg-amber-500 text-white p-2 rounded-xl">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-amber-800">当前处于 [ 游客只读共享模式 ]</h4>
+                    <p class="text-[10px] text-amber-600 mt-0.5">你可以流畅查看并导出爱车的保养详情，但修改、删除操作已被锁定。若你是车主，请在设置中配置你的 Token。</p>
+                </div>
+            </div>
+            <button onclick="toggleModal('syncModal', true)" class="text-[10px] bg-amber-500 hover:bg-amber-600 text-white font-bold px-3 py-1.5 rounded-lg transition-colors flex-shrink-0">
+                输入 Token 激活编辑
+            </button>
+        </div>
+
+        <!-- 统计和提醒面板 -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <!-- 总花费 -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400">总保养花费</p>
+                    <h3 class="text-2xl font-bold text-slate-800 mt-1" id="statTotalCost">¥0.00</h3>
+                    <p class="text-[10px] text-slate-400 mt-1" id="statCostDetail">已记录细项合计</p>
+                </div>
+                <div class="bg-indigo-50 p-3 rounded-xl text-indigo-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- 累计次数 -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400">累计保养次数</p>
+                    <h3 class="text-2xl font-bold text-slate-800 mt-1" id="statTotalCount">0 次</h3>
+                    <p class="text-[10px] text-slate-400 mt-1" id="statLastDate">最近：暂无</p>
+                </div>
+                <div class="bg-emerald-50 p-3 rounded-xl text-emerald-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 112-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- 单次均价 -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-slate-400">平均单次花费</p>
+                    <h3 class="text-2xl font-bold text-slate-800 mt-1" id="statAverageCost">¥0.00</h3>
+                    <p class="text-[10px] text-slate-400 mt-1">每次进店综合平均值</p>
+                </div>
+                <div class="bg-amber-50 p-3 rounded-xl text-amber-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                </div>
+            </div>
+
+            <!-- 保养到期提醒 -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+                <p class="text-xs font-semibold text-slate-400">下期保养提醒</p>
+                <div class="mt-2 flex items-center space-x-2">
+                    <span class="inline-block w-3 h-3 rounded-full animate-pulse" id="reminderStatusDot"></span>
+                    <span class="font-bold text-sm" id="reminderStatusText">正在侦测车况...</span>
+                </div>
+                <p class="text-[10px] text-slate-400 mt-1" id="reminderStatusSubtext">--</p>
+            </div>
+        </div>
+
+        <!-- 核心布局 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- 左侧：保养档案记录列表 -->
+            <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col min-h-[500px]">
+                <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div>
+                        <h2 class="text-md font-bold text-slate-800">保养档案卡片库</h2>
+                        <p class="text-xs text-slate-400 mt-0.5">支持精细项目明细展示，数据已安全同步</p>
+                    </div>
+                    <div class="flex items-center space-x-2 flex-wrap gap-y-2">
+                        <select id="categoryFilter" onchange="currentPage=1;renderRecordsTable()" class="text-xs border border-slate-200 rounded-xl px-3 py-2 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="All">全部类型</option>
+                            <option value="常规保养">常规保养</option>
+                            <option value="大保养">大保养</option>
+                            <option value="专项维修">专项维修</option>
+                            <option value="美容美化">美容美化</option>
+                        </select>
+                        
+                        <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3.5 py-2 rounded-xl font-semibold shadow-sm transition-colors flex items-center space-x-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            <span>导出</span>
+                        </button>
+
+                        <button onclick="toggleBatchMode()" id="batchModeBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs px-3 py-2 rounded-xl font-semibold transition-colors flex items-center space-x-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 112-2h2a2 2 0 012 2" /></svg>
+                            <span>批量管理</span>
+                        </button>
+
+                        <button onclick="toggleModal('recycleBinModal', true)" class="bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs px-3 py-2 rounded-xl font-semibold transition-colors flex items-center space-x-1 border border-amber-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            <span>回收站</span>
+                            <span id="recycleBinCount" class="bg-amber-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold hidden">0</span>
+                        </button>
+
+                        <button onclick="toggleModal('operationLogModal', true)" class="bg-slate-50 hover:bg-slate-100 text-slate-500 text-xs px-3 py-2 rounded-xl font-semibold transition-colors flex items-center space-x-1 border border-slate-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 112-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                            <span>日志</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 档案卡展示区 -->
+                <div class="p-5 flex-grow">
+                    <div id="recordsContainer" class="space-y-4">
+                        <!-- JS 动态载入 -->
+                    </div>
+                    
+                    <!-- 批量操作栏 -->
+                    <div id="batchActionBar" class="batch-action-bar hidden">
+                        <div class="flex items-center justify-between bg-indigo-50 border border-indigo-200 rounded-xl p-3">
+                            <div class="flex items-center space-x-3">
+                                <button onclick="selectAllRecords()" class="text-xs text-indigo-600 hover:text-indigo-800 font-semibold">全选当前页</button>
+                                <span class="text-xs text-slate-500">已选 <strong id="selectedCountDisplay" class="text-indigo-700">0</strong> 条</span>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <button onclick="batchDeleteRecords()" class="bg-rose-600 hover:bg-rose-700 text-white text-xs px-4 py-2 rounded-xl font-semibold transition-colors">批量删除</button>
+                                <button onclick="toggleBatchMode()" class="bg-slate-200 hover:bg-slate-300 text-slate-600 text-xs px-4 py-2 rounded-xl font-semibold transition-colors">退出批量</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 分页控件 -->
+                    <div id="paginationContainer" class="flex items-center justify-center space-x-1 mt-4 hidden">
+                    </div>
+                    
+                    <!-- 空白状态 -->
+                    <div id="emptyState" class="hidden py-16 text-center text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 112-2h2a2 2 0 012 2" />
+                        </svg>
+                        <p class="font-bold text-slate-500 text-sm">暂无任何保养记录</p>
+                        <p class="text-xs text-slate-400 mt-1">请在右侧明细账单中添加你的第一笔保养记录！</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧：记账表单和图表分析 -->
+            <div class="space-y-6">
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5 relative" id="recordFormCard">
+                    <!-- 只读遮罩层 -->
+                    <div id="formReadOnlyMask" class="hidden absolute inset-0 bg-slate-50/80 backdrop-blur-xs rounded-2xl z-30 flex flex-col items-center justify-center p-6 text-center">
+                        <div class="bg-slate-100 p-3 rounded-full text-slate-500 mb-3 shadow-xs">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                        </div>
+                        <h4 class="text-xs font-bold text-slate-700">表单处于只读分享状态</h4>
+                        <p class="text-[10px] text-slate-400 max-w-[200px] mt-1">只有车主可以通过 Token 登录后在此页面进行编辑录入。</p>
+                    </div>
+
+                    <h3 class="text-md font-bold text-slate-800 mb-4 flex items-center space-x-2">
+                        <span class="p-1.5 bg-indigo-50 text-indigo-700 rounded-xl" id="formHeaderIcon">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" /></svg>
+                        </span>
+                        <span id="formTitle">新建保养账单</span>
+                    </h3>
+
+                    <form id="recordForm" onsubmit="handleFormSubmit(event)" class="space-y-4">
+                        <input type="hidden" id="editRecordId">
+                        
+                        <!-- 核心字段 -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">施工日期 *</label>
+                                <input type="date" id="recordDate" required class="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">当前里程 (km) *</label>
+                                <input type="number" id="recordMileage" required min="0" placeholder="例如: 65200" class="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-500 mb-1">保养分类属性 *</label>
+                            <select id="recordCategory" required class="w-full text-xs border border-slate-200 rounded-xl p-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="常规保养">常规保养 (换机油、三滤等)</option>
+                                <option value="大保养">大保养 (火花塞/变速箱油/刹车皮等)</option>
+                                <option value="专项维修">专项维修 (故障抢修/底盘异响/更换大件)</option>
+                                <option value="美容美化">美容美化 (改色/洗车美容/漆面养护)</option>
+                            </select>
+                        </div>
+
+                        <!-- 细分耗材及项目 -->
+                        <div class="border-t border-b border-slate-100 py-3">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="block text-xs font-bold text-slate-600">具体项目开销明细 *</label>
+                                <button type="button" id="addItemRowBtn" onclick="addNewItemRow('', '')" class="text-xs text-indigo-600 hover:text-indigo-800 flex items-center space-x-1 font-semibold">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                                    <span>添加子项目</span>
+                                </button>
+                            </div>
+                            <div id="itemizedItemsList" class="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                <!-- JS 动态添加细目行 -->
+                            </div>
+                            <div class="flex justify-between items-center mt-3 bg-slate-50 p-2 rounded-xl border border-slate-100">
+                                <span class="text-xs font-bold text-slate-500">实付总金额（自动计算）:</span>
+                                <span class="text-sm font-bold text-indigo-600" id="totalCostDisplay">¥0.00</span>
+                            </div>
+                        </div>
+
+                        <!-- 下期提醒预测 -->
+                        <div class="p-3 bg-indigo-50/50 rounded-xl space-y-3 border border-indigo-100/30">
+                            <p class="text-xs font-bold text-indigo-800">🔮 下次保养预测（满足任一条件自动提醒）</p>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">下次里程 (km)</label>
+                                    <input type="number" id="recordNextMileage" placeholder="里程预警" class="w-full text-xs border border-slate-200 rounded-xl p-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-semibold text-slate-500 mb-1">下次到期日期</label>
+                                    <input type="date" id="recordNextDate" class="w-full text-xs border border-slate-200 rounded-xl p-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 地点和备注 -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">施工服务商</label>
+                                <input type="text" id="recordShop" placeholder="4S店 / 途虎养车" class="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-500 mb-1">随车备注</label>
+                                <input type="text" id="recordNotes" placeholder="底盘无异常" class="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                        </div>
+
+                        <!-- 提交操作 -->
+                        <div class="flex space-x-2 pt-2">
+                            <button type="submit" id="submitBtn" class="flex-grow bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-2.5 rounded-xl transition-all shadow-md shadow-indigo-200 hover:-translate-y-0.5">
+                                保存账单
+                            </button>
+                            <button type="button" onclick="cancelEditing()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs px-4 py-2.5 rounded-xl transition-colors">
+                                取消
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- 饼图分析 -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
+                    <h3 class="text-md font-bold text-slate-800 mb-4">消费构成多维分析</h3>
+                    <div class="h-44 relative flex items-center justify-center">
+                        <canvas id="costChart"></canvas>
+                        <div id="chartEmptyState" class="absolute inset-0 bg-white flex items-center justify-center text-xs text-slate-400">
+                            添加保养记录后，即可计算类别花销比率
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- 弹窗：管理车辆 -->
+    <div id="carModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl transform scale-95 transition-transform duration-300">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-md font-bold text-slate-800 flex items-center gap-1.5">
+                    我的车库与当前里程
+                    <span id="carModalReadOnlyTag" class="hidden text-[9px] bg-amber-500 text-white px-1.5 py-0.5 rounded">只读</span>
+                </h3>
+                <button onclick="toggleModal('carModal', false)" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+
+            <!-- 车辆列表 -->
+            <div class="space-y-2 mb-4 max-h-48 overflow-y-auto" id="carList">
+                <!-- 动态载入 -->
+            </div>
+
+            <!-- 新增车辆 -->
+            <div class="border-t border-slate-100 pt-4 relative" id="newCarFormCard">
+                <div id="carFormReadOnlyMask" class="hidden absolute inset-0 bg-white/90 backdrop-blur-xs z-30 flex flex-col items-center justify-center text-center">
+                    <p class="text-[10px] text-slate-400 font-semibold">云端只读模式，无法添加新车档案</p>
+                </div>
+                <h4 class="text-xs font-bold text-slate-700 mb-2">添加新车辆信息</h4>
+                <div class="space-y-2">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-400 mb-1">车名 / 牌照号 *</label>
+                            <input type="text" id="newCarName" placeholder="奔驰C级 (粤B·88888)" class="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-400 mb-1">仪表盘里程 (km) *</label>
+                            <input type="number" id="newCarOdo" placeholder="用于保养差值提醒" class="w-full text-xs border border-slate-200 rounded-xl p-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                    <button onclick="saveCar()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs py-2 rounded-xl transition-all shadow-md shadow-indigo-100">
+                        保存并使用这台车
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：云端同步与高级免密设置⚙️ -->
+    <div id="syncModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl transform scale-95 transition-transform duration-300 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-md font-bold text-slate-800 flex items-center gap-1.5">
+                    ⚙️ 账本云端同步设置
+                </h3>
+                <button onclick="toggleModal('syncModal', false)" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">云端存储模式</label>
+                    <select id="syncModeSelect" onchange="handleSyncModeChange()" class="w-full text-xs border border-slate-200 rounded-xl p-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="local">纯本地离线模式 (Local Storage)</option>
+                        <option value="gist">GitHub Gist 云同步 (强烈推荐、完全免费)</option>
+                        <option value="firebase">Firebase 实时数据库模式 (适合极客玩家)</option>
+                    </select>
+                </div>
+
+                <!-- GitHub Gist 配置与智能免输入登录工具 -->
+                <div id="gistConfigArea" class="hidden space-y-3 p-3.5 bg-slate-50 border border-slate-150 rounded-xl">
+                    <div class="flex justify-between items-center">
+                        <p class="text-[11px] font-bold text-slate-500">GitHub 核心配置项</p>
+                        <span class="text-[10px] text-indigo-600 cursor-pointer font-bold hover:underline" onclick="toggleGistMagicTools()">⚙️ 展开快捷导入/魔术链接</span>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-400 mb-1">GitHub Personal Access Token (PAT) *</label>
+                            <input type="password" id="gistTokenInput" placeholder="ghp_xxxxxxxxxxxx" class="w-full text-xs border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                            <p class="text-[9px] text-slate-400 mt-0.5">⚠️ 注：为确保安全，此密码将被锁定在您本地浏览器中，绝不会被传到 GitHub 仓库。</p>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-400 mb-1">Gist ID *</label>
+                            <input type="text" id="gistIdInput" placeholder="你的私有 Gist 32位哈希 ID" class="w-full text-xs border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                        </div>
+                    </div>
+
+                    <!-- Gist 智能魔术工具箱 -->
+                    <div id="gistMagicTools" class="hidden border-t border-slate-200 pt-3 mt-2 space-y-2">
+                        <p class="text-[10px] text-slate-400 leading-relaxed">
+                            为了免去新电脑上重复输入密匙的苦恼，你可以配置并生成魔术一键登录。
+                        </p>
+                        
+                        <div class="grid grid-cols-2 gap-2">
+                            <button type="button" onclick="generateMagicLink()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-semibold py-2 px-1 rounded-lg transition-colors" title="生成专属快捷登录链接，加为浏览器书签即可实现免密无感登录">
+                                📋 生成书签魔术链接
+                            </button>
+                            <button type="button" onclick="exportConfigFile()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 text-[10px] font-semibold py-2 px-1 rounded-lg transition-colors">
+                                💾 导出凭证配置文件
+                            </button>
+                        </div>
+                        
+                        <div class="border-t border-dashed border-slate-200 pt-2 flex items-center justify-between">
+                            <span class="text-[10px] text-slate-500 font-bold">📂 导入现有凭证：</span>
+                            <input type="file" id="configFileLoader" onchange="importConfigFile(event)" class="hidden" accept=".json">
+                            <button type="button" onclick="document.getElementById('configFileLoader').click()" class="text-[10px] bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-md font-bold">
+                                上传 JSON 凭证
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2 pt-2">
+                        <button onclick="testAndSyncGist()" class="flex-grow bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2 rounded-lg transition-all shadow-xs">
+                            拉取云端并覆盖本地
+                        </button>
+                        <button onclick="pushLocalToGist()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-3 py-2 rounded-lg transition-all shadow-xs" title="上传本地数据到 Gist">
+                            上传本地至云端
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Firebase 配置区域 -->
+                <div id="firebaseConfigArea" class="hidden p-3.5 bg-slate-50 border border-slate-150 rounded-xl space-y-2">
+                    <p class="text-[11px] text-slate-500">
+                        Firebase 需要在 HTML 源码中配置 `__firebase_config` 凭证，在此切换模式会自动尝试连接已设置好的后台服务。
+                    </p>
+                    <div class="text-[11px] text-indigo-600 font-semibold" id="firebaseConnStatus">
+                        未检测到静态变量凭证，请先修改 HTML 源码配置。
+                    </div>
+                </div>
+
+                <!-- 确定保存配置 -->
+                <div class="pt-2 border-t border-slate-100 flex justify-end space-x-2">
+                    <button onclick="saveSyncSettings()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-4 py-2.5 rounded-xl shadow-md">
+                        应用并保存设置
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：二次确认模态框 -->
+    <div id="confirmModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[100] flex items-center justify-center hidden opacity-0 transition-opacity duration-200">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl transform scale-95 transition-transform duration-200">
+            <h3 class="text-md font-bold text-slate-800 mb-2" id="confirmTitle">确认操作</h3>
+            <p class="text-xs text-slate-500 mb-5 leading-relaxed" id="confirmMessage">你确定要执行此操作吗？</p>
+            <div class="flex justify-end space-x-2">
+                <button id="confirmCancelBtn" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs px-4 py-2 rounded-xl transition-colors">
+                    取消
+                </button>
+                <button id="confirmConfirmBtn" class="bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition-colors">
+                    确认
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：回收站 -->
+    <div id="recycleBinModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform scale-95 transition-transform duration-300 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-md font-bold text-slate-800 flex items-center gap-1.5">
+                    🗑️ 回收站
+                    <span id="recycleBinModalCount" class="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-bold">0</span>
+                </h3>
+                <button onclick="toggleModal('recycleBinModal', false)" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <p class="text-[10px] text-slate-400 mb-3">已删除的记录将在此保留，可随时恢复。永久删除后不可找回。</p>
+            <div id="recycleBinList" class="space-y-3 overflow-y-auto flex-grow mb-4">
+            </div>
+            <div id="recycleBinEmpty" class="hidden py-10 text-center text-slate-400">
+                <p class="text-xs font-semibold">回收站为空</p>
+                <p class="text-[10px] mt-1">删除的记录会暂存在这里</p>
+            </div>
+            <div class="border-t border-slate-100 pt-3 flex justify-between items-center">
+                <button onclick="emptyRecycleBin()" id="emptyRecycleBinBtn" class="text-[10px] text-rose-600 hover:text-rose-800 font-semibold transition-colors">🗑️ 清空回收站（永久删除）</button>
+                <button onclick="toggleModal('recycleBinModal', false)" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs px-4 py-2 rounded-xl transition-colors">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 弹窗：操作日志 -->
+    <div id="operationLogModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl transform scale-95 transition-transform duration-300 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-md font-bold text-slate-800 flex items-center gap-1.5">📋 操作日志</h3>
+                <button onclick="toggleModal('operationLogModal', false)" class="text-slate-400 hover:text-slate-600 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+            </div>
+            <div id="operationLogList" class="space-y-3 overflow-y-auto flex-grow mb-4">
+            </div>
+            <div id="operationLogEmpty" class="hidden py-10 text-center text-slate-400">
+                <p class="text-xs font-semibold">暂无操作日志</p>
+                <p class="text-[10px] mt-1">编辑、删除、恢复操作均会记录在此</p>
+            </div>
+            <div class="border-t border-slate-100 pt-3 flex justify-end">
+                <button onclick="clearOperationLogs()" class="text-[10px] text-slate-400 hover:text-slate-600 font-semibold mr-3 transition-colors">清空日志</button>
+                <button onclick="toggleModal('operationLogModal', false)" class="bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold text-xs px-4 py-2 rounded-xl transition-colors">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 消息气泡提示容器 -->
+    <div id="toastContainer" class="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 max-w-sm w-full px-4"></div>
+
+    <!-- Firebase 官方 JS SDK (导入所需模块) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot, collection, query, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ==========================================
+        // 🔮 【高级免密共享配置项】 (朋友访问自动免密读取)
+        // ==========================================
+        // 如果你想让朋友直接访问网页网址就能【免密查看】你的车况账本：
+        // 请在此处填入你的 32 位 GitHub Gist ID：
+        const DEFAULT_GIST_ID = "61d2d3cbcf6b3491f6356885df7c7e5a"; 
+        // ⚠️ 特别警告：千万不要把你的 Token (ghp_...) 贴在下面！
+        // GitHub 会在 3 秒内扫描到并自动注销作废它！
+        // ==========================================
+
+        // 全局状态管理
+        window.cars = [];
+        window.activeCarId = null;
+        window.records = [];
+        window.costChartInstance = null;
+        
+        // 云模式选项: 'local' | 'gist' | 'firebase'
+        window.currentSyncMode = 'local'; 
+        window.isCloudMode = false; // Firebase 连接判断
+        window.userId = null;
+        window.db = null;
+        window.auth = null;
+        window.isReadOnlyMode = false; // 只读分享锁
+
+        window.batchMode = false;
+        window.selectedRecordIds = new Set();
+        window.currentPage = 1;
+        window.pageSize = 20;
+        window.operationLogs = [];
+        window.formBackup = null;
+
+        // 统一消息气泡 (Toast)
+        window.showToast = function(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `p-3.5 rounded-xl text-xs font-semibold text-white shadow-lg transition-all duration-300 transform translate-y-5 opacity-0 flex items-center justify-between ${
+                type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-amber-600'
+            }`;
+            toast.innerHTML = `
+                <span>${message}</span>
+                <button class="ml-2 hover:opacity-80" onclick="this.parentElement.remove()">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.remove('translate-y-5', 'opacity-0');
+            }, 10);
+            setTimeout(() => {
+                toast.classList.add('translate-y-5', 'opacity-0');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        };
+
+        // 统一确认模态框
+        window.showConfirm = function(title, msg, onConfirm) {
+            if (window.isReadOnlyMode) {
+                showToast("当前为只读分享状态，无法进行删改操作！", "error");
+                return;
+            }
+            const modal = document.getElementById('confirmModal');
+            const inner = modal.querySelector('div');
+            document.getElementById('confirmTitle').innerText = title;
+            document.getElementById('confirmMessage').innerText = msg;
+            
+            const cancelBtn = document.getElementById('confirmCancelBtn');
+            const confirmBtn = document.getElementById('confirmConfirmBtn');
+            
+            const closeModal = () => {
+                modal.classList.add('opacity-0');
+                inner.classList.add('scale-95');
+                setTimeout(() => modal.classList.add('hidden'), 200);
+            };
+
+            cancelBtn.onclick = closeModal;
+            confirmBtn.onclick = () => {
+                onConfirm();
+                closeModal();
+            };
+
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                inner.classList.remove('scale-95');
+            }, 10);
+        };
+
+        // 初始化和云同步启动器
+        window.onload = async function() {
+            // 设置默认施工日期为当前客户端日期
+            document.getElementById('recordDate').value = new Date().toISOString().split('T')[0];
+            resetForm();
+
+            // 检测魔术链接快速解析登录
+            const urlParams = new URLSearchParams(window.location.search);
+            const rawToken = urlParams.get('t');
+            const rawGist = urlParams.get('g');
+            const urlSync = urlParams.get('sync');
+
+            if (urlSync === 'gist' && rawToken && rawGist) {
+                try {
+                    const token = atob(rawToken);
+                    const gistId = atob(rawGist);
+                    
+                    localStorage.setItem('car_ledger_sync_mode', 'gist');
+                    localStorage.setItem('car_ledger_gist_token', token);
+                    localStorage.setItem('car_ledger_gist_id', gistId);
+                    
+                    // 消除痕迹保护私隐
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    showToast("🎉 检测到专属魔术链接！已成功绑定车主身份并开启同步！", "success");
+                    
+                    window.currentSyncMode = 'gist';
+                    document.getElementById('syncModeSelect').value = 'gist';
+                    document.getElementById('gistTokenInput').value = token;
+                    document.getElementById('gistIdInput').value = gistId;
+                    
+                    await initGistSync(token, gistId, true);
+                    return;
+                } catch(e) {
+                    showToast("魔术链接校验失败", "error");
+                }
+            }
+
+            // 1. 读取本地存储的同步机制配置
+            let savedSyncMode = localStorage.getItem('car_ledger_sync_mode');
+            
+            // 智能识别是否为未配置的占位符 ID
+            const isDefaultPlaceholder = (DEFAULT_GIST_ID === "61d2d3cbcf6b3491f6356885df7c7e5a" || DEFAULT_GIST_ID === "YOUR_GIST_ID_HERE" || !DEFAULT_GIST_ID);
+
+            // 如果本地从没有设置过同步模式，但代码里设置了真正的“免密共享 ID”，则自动为游客切到 Gist 只读模式
+            if (!savedSyncMode && !isDefaultPlaceholder) {
+                savedSyncMode = 'gist';
+                localStorage.setItem('car_ledger_sync_mode', 'gist');
+                localStorage.setItem('car_ledger_gist_id', DEFAULT_GIST_ID);
+            } else if (!savedSyncMode) {
+                savedSyncMode = 'local';
+            }
+
+            window.currentSyncMode = savedSyncMode;
+            document.getElementById('syncModeSelect').value = savedSyncMode;
+
+            // 2. 加载 Gist 同步密钥
+            const gistToken = localStorage.getItem('car_ledger_gist_token') || '';
+            const gistId = localStorage.getItem('car_ledger_gist_id') || DEFAULT_GIST_ID || '';
+            document.getElementById('gistTokenInput').value = gistToken;
+            document.getElementById('gistIdInput').value = gistId;
+
+            // 根据不同的模式启动应用
+            if (savedSyncMode === 'gist') {
+                initGistSync(gistToken, gistId);
+            } else if (savedSyncMode === 'firebase') {
+                initFirebase();
+            } else {
+                initLocalMode();
+            }
+        };
+
+        // =======【1. 本地存储模式】=======
+        function initLocalMode(persist = true) {
+            window.currentSyncMode = 'local';
+            window.isCloudMode = false;
+            window.isReadOnlyMode = false;
+            if (persist) {
+                localStorage.setItem('car_ledger_sync_mode', 'local');
+            }
+            document.getElementById('syncModeSelect').value = 'local';
+            document.getElementById('gistConfigArea').classList.add('hidden');
+            document.getElementById('firebaseConfigArea').classList.add('hidden');
+            updateLockStatus();
+            document.getElementById('dbStatusBadge').innerText = "本地离线存储模式";
+            document.getElementById('dbStatusBadge').className = "text-[10px] bg-slate-500 text-white px-1.5 py-0.5 rounded font-bold";
+            
+            loadFromLocalStorage();
+            
+            // 如果第一次打开本地模式，初始化一些样例演示数据
+            if (window.cars.length === 0) {
+                window.cars = [
+                    { id: 'car-demo-1', name: '理想L8 (粤B·55555)', odo: 65200 }
+                ];
+                window.activeCarId = 'car-demo-1';
+                window.records = [
+                    {
+                        id: 'rec-demo-1',
+                        carId: 'car-demo-1',
+                        date: '2026-03-20',
+                        mileage: 64200,
+                        category: '常规保养',
+                        shop: '途虎养车深圳蛇口店',
+                        notes: '使用全合成机油，发动机运转非常平稳。下次可提前检测火花塞。',
+                        nextMileage: 74200,
+                        nextDate: '2026-09-20',
+                        items: [
+                            { name: '全合成机油 (壳牌超凡喜力 0W-20 4L)', cost: 340.00 },
+                            { name: '曼牌机油滤清器', cost: 55.00 },
+                            { name: '马勒空调滤清器芯', cost: 80.00 },
+                            { name: '常规维保工时费', cost: 60.00 }
+                        ],
+                        totalCost: 535.00
+                    }
+                ];
+                saveToLocalStorage();
+            }
+            updateUI();
+        }
+
+        function loadFromLocalStorage() {
+            window.cars = JSON.parse(localStorage.getItem('car_ledger_cars')) || [];
+            window.activeCarId = localStorage.getItem('car_ledger_active_car_id') || null;
+            window.records = JSON.parse(localStorage.getItem('car_ledger_records')) || [];
+            window.operationLogs = JSON.parse(localStorage.getItem('car_ledger_operation_logs')) || [];
+        }
+
+        function saveToLocalStorage() {
+            localStorage.setItem('car_ledger_cars', JSON.stringify(window.cars));
+            localStorage.setItem('car_ledger_active_car_id', window.activeCarId);
+            localStorage.setItem('car_ledger_records', JSON.stringify(window.records));
+            localStorage.setItem('car_ledger_operation_logs', JSON.stringify(window.operationLogs));
+        }
+
+        function fallbackToLocalWithWarning(msg) {
+            showToast(msg, "warning");
+            initLocalMode();
+        }
+
+        async function recalculateCarOdo() {
+            const car = getActiveCar();
+            if (!car) return;
+            const activeRecords = getActiveRecords();
+            let maxMileage = 0;
+            activeRecords.forEach(r => {
+                if (r.mileage > maxMileage) maxMileage = r.mileage;
+            });
+            if (car.odo !== maxMileage || activeRecords.length === 0) {
+                const newOdo = activeRecords.length > 0 ? maxMileage : 0;
+                if (window.currentSyncMode === 'firebase' && window.isCloudMode) {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'car-maintenance-ledger-pro';
+                    const carDoc = doc(window.db, 'artifacts', appId, 'users', window.userId, 'cars', car.id);
+                    await updateDoc(carDoc, { odo: newOdo });
+                }
+                car.odo = newOdo;
+            }
+        }
+
+        function getActiveRecords() {
+            return window.records.filter(r => r.carId === window.activeCarId && !r.deletedAt);
+        }
+
+        function getDeletedRecords() {
+            return window.records.filter(r => r.carId === window.activeCarId && r.deletedAt);
+        }
+
+        function addOperationLog(action, recordId, recordSummary) {
+            window.operationLogs.unshift({
+                id: 'log-' + Date.now(),
+                action,
+                recordId,
+                recordSummary,
+                operator: '车主',
+                timestamp: new Date().toISOString()
+            });
+            if (window.operationLogs.length > 500) {
+                window.operationLogs = window.operationLogs.slice(0, 500);
+            }
+            saveToLocalStorage();
+        }
+
+        function getRecordSummary(r) {
+            if (!r) return '未知记录';
+            return `${r.date} | ${r.category} | ${r.mileage.toLocaleString()}km | ¥${roundMoney(r.totalCost).toFixed(2)}`;
+        }
+
+        function validateForm() {
+            let isValid = true;
+            document.querySelectorAll('.validation-error').forEach(el => el.classList.remove('validation-error'));
+            document.querySelectorAll('.validation-error-msg').forEach(el => el.remove());
+
+            const dateInput = document.getElementById('recordDate');
+            if (!dateInput.value) {
+                markInvalid(dateInput, '请选择施工日期');
+                isValid = false;
+            }
+
+            const mileageInput = document.getElementById('recordMileage');
+            if (!mileageInput.value || parseInt(mileageInput.value) < 0) {
+                markInvalid(mileageInput, '请输入有效的里程数');
+                isValid = false;
+            }
+
+            const finalItems = currentItemRows.filter(it => it !== null && it.name.trim() !== '');
+            if (finalItems.length === 0) {
+                showToast("请至少输入一条有效的开销子项目", "error");
+                isValid = false;
+            }
+
+            let hasInvalidCost = false;
+            finalItems.forEach(it => {
+                const c = roundMoney(it.cost);
+                if (isNaN(c) || c < 0) {
+                    hasInvalidCost = true;
+                }
+            });
+            if (hasInvalidCost && finalItems.length > 0) {
+                showToast("子项目费用不能为负数", "error");
+                isValid = false;
+            }
+
+            return isValid;
+        }
+
+        function markInvalid(inputEl, msg) {
+            inputEl.classList.add('validation-error');
+            const errorDiv = document.createElement('p');
+            errorDiv.className = 'validation-error-msg';
+            errorDiv.innerText = msg;
+            inputEl.parentElement.appendChild(errorDiv);
+            inputEl.addEventListener('input', function handler() {
+                inputEl.classList.remove('validation-error');
+                const err = inputEl.parentElement.querySelector('.validation-error-msg');
+                if (err) err.remove();
+                inputEl.removeEventListener('input', handler);
+            }, { once: true });
+        }
+
+        function backupFormState() {
+            window.formBackup = {
+                editRecordId: document.getElementById('editRecordId').value,
+                date: document.getElementById('recordDate').value,
+                mileage: document.getElementById('recordMileage').value,
+                category: document.getElementById('recordCategory').value,
+                nextMileage: document.getElementById('recordNextMileage').value,
+                nextDate: document.getElementById('recordNextDate').value,
+                shop: document.getElementById('recordShop').value,
+                notes: document.getElementById('recordNotes').value,
+                items: JSON.parse(JSON.stringify(currentItemRows))
+            };
+        }
+
+        function restoreFormBackup() {
+            if (!window.formBackup) return;
+            const b = window.formBackup;
+            document.getElementById('editRecordId').value = b.editRecordId;
+            document.getElementById('recordDate').value = b.date;
+            document.getElementById('recordMileage').value = b.mileage;
+            document.getElementById('recordCategory').value = b.category;
+            document.getElementById('recordNextMileage').value = b.nextMileage;
+            document.getElementById('recordNextDate').value = b.nextDate;
+            document.getElementById('recordShop').value = b.shop;
+            document.getElementById('recordNotes').value = b.notes;
+            document.getElementById('itemizedItemsList').innerHTML = '';
+            currentItemRows = [];
+            b.items.forEach(it => {
+                if (it) addNewItemRow(it.name, it.cost);
+            });
+            calculateDynamicTotal();
+            window.formBackup = null;
+        }
+
+        // =======【2. GitHub Gist 核心云同步模块 - 支持免密只读与安全过滤保底】=======
+        async function initGistSync(token, id, alertSuccess = false) {
+            const isPlaceholder = (id === "61d2d3cbcf6b3491f6356885df7c7e5a" || id === "YOUR_GIST_ID_HERE" || !id);
+            const previousMode = window.currentSyncMode;
+            window.currentSyncMode = 'gist';
+            
+            if (isPlaceholder && !token && previousMode !== 'gist') {
+                initLocalMode();
+                return;
+            }
+
+            if (!id) {
+                fallbackToLocalWithWarning("同步 Gist ID 不存在，已切回本地离线账本！");
+                return;
+            }
+
+            const reqHeaders = { "Accept": "application/vnd.github.v3+json" };
+            if (token) {
+                reqHeaders["Authorization"] = `token ${token}`;
+                window.isReadOnlyMode = false;
+                document.getElementById('dbStatusBadge').innerText = "云同步 · 车主模式";
+                document.getElementById('dbStatusBadge').className = "text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded font-bold animate-pulse";
+            } else {
+                window.isReadOnlyMode = true;
+                document.getElementById('dbStatusBadge').innerText = "云端只读共享模式";
+                document.getElementById('dbStatusBadge').className = "text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-bold";
+            }
+            updateLockStatus();
+
+            try {
+                // 匿名或授权获取 Gist 资源
+                const response = await fetch(`https://api.github.com/gists/${id}`, {
+                    method: 'GET',
+                    headers: reqHeaders
+                });
+
+                if (response.status === 404) {
+                    throw new Error("Gist ID 未找到 (404)。请确认您的 Gist ID 是否正确或是否已被删除。");
+                }
+                if (response.status === 401) {
+                    throw new Error("GitHub 认证失败 (401)。您的 Token 可能已失效或权限不足。");
+                }
+                if (!response.ok) throw new Error(`Gist 访问失败，HTTP 状态码: ${response.status}`);
+
+                const gistData = await response.json();
+                const file = gistData.files['car_maintenance_data.json'];
+                
+                if (file && file.content) {
+                    const cloudData = JSON.parse(file.content);
+                    window.cars = cloudData.cars || [];
+                    window.activeCarId = cloudData.activeCarId || null;
+                    window.records = cloudData.records || [];
+                    
+                    // 仅当车主可写状态下，才在本地覆写备份
+                    if (!window.isReadOnlyMode) {
+                        saveToLocalStorage();
+                    }
+                    
+                    if (alertSuccess) {
+                        showToast(window.isReadOnlyMode ? "免密导入成功！已加载最新的云端共享保养账单" : "已成功从 GitHub Gist 下载并同步最新的车主数据！");
+                    }
+                } else {
+                    if (window.isReadOnlyMode) {
+                        showToast("共享端中暂未发现合法的保养数据格式，已回退演示状态", "warning");
+                    } else {
+                        showToast("云端未发现账本，正在为您自动在 GitHub 创建初始化文件...", "warning");
+                        await uploadLocalToGistBackend(token, id);
+                    }
+                }
+                updateUI();
+
+            } catch (err) {
+                console.warn("Gist Sync Exception:", err.message);
+                if (!isPlaceholder) {
+                    showToast(`云端同步失败: ${err.message || "网络连接受限"}。已降级至本地保底模式，刷新后将重试云端连接`, "warning");
+                }
+                initLocalMode(false);
+            }
+        }
+
+        // 私有上传引擎
+        async function uploadLocalToGistBackend(token, id) {
+            if (window.isReadOnlyMode) return false;
+            saveToLocalStorage(); // 先保存到本地，确保数据一致性
+            const payload = {
+                cars: window.cars,
+                activeCarId: window.activeCarId,
+                records: window.records
+            };
+
+            try {
+                const response = await fetch(`https://api.github.com/gists/${id}`, {
+                    method: 'PATCH',
+                    headers: {
+                        "Authorization": `token ${token}`,
+                        "Accept": "application/vnd.github.v3+json",
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        files: {
+                            "car_maintenance_data.json": {
+                                content: JSON.stringify(payload, null, 2)
+                            }
+                        }
+                    })
+                });
+
+                if (!response.ok) throw new Error("Gist PATCH 请求失败");
+                showToast("云端同步完成！数据已安全同步到你的 GitHub 仓库中。");
+                return true;
+            } catch (err) {
+                console.error(err);
+                showToast("同步上传云端失败，请检查网络", "error");
+                return false;
+            }
+        }
+
+        // 联动更新网页只读状态
+        function updateLockStatus() {
+            const banner = document.getElementById('readOnlyBanner');
+            const formMask = document.getElementById('formReadOnlyMask');
+            const carMask = document.getElementById('carFormReadOnlyMask');
+            const carTag = document.getElementById('carModalReadOnlyTag');
+
+            if (window.isReadOnlyMode) {
+                banner.classList.remove('hidden');
+                formMask.classList.remove('hidden');
+                carMask.classList.remove('hidden');
+                carTag.classList.remove('hidden');
+            } else {
+                banner.classList.add('hidden');
+                formMask.classList.add('hidden');
+                carMask.classList.add('hidden');
+                carTag.classList.add('hidden');
+            }
+        }
+
+        // 齿轮对话框交互
+        window.toggleGistMagicTools = function() {
+            const tools = document.getElementById('gistMagicTools');
+            tools.classList.toggle('hidden');
+        }
+
+        window.generateMagicLink = function() {
+            const token = document.getElementById('gistTokenInput').value.trim();
+            const id = document.getElementById('gistIdInput').value.trim();
+            if (!token || !id) {
+                showToast("请先填入完整的 Token 和 Gist ID 以便生成登录链接", "error");
+                return;
+            }
+
+            // 对密钥参数简单混淆（Base64），避免在地址栏或书签栏太容易被肉眼窥视
+            const encToken = btoa(token);
+            const encGist = btoa(id);
+            const link = `${window.location.origin}${window.location.pathname}?sync=gist&t=${encToken}&g=${encGist}`;
+
+            // 写入剪切板
+            const tmpInput = document.createElement("input");
+            document.body.appendChild(tmpInput);
+            tmpInput.value = link;
+            tmpInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tmpInput);
+
+            showConfirm("专属登录链接生成完毕！", `已将链接拷贝到剪贴板！\n${link}\n\n★ 建议：在任意新电脑或手机上访问此链接后，立刻【加入收藏夹/设为书签】，以后只需点击书签即可直接无密进行车辆录入，无需再打开密码本复制Token。立刻去保存吗？`, () => {});
+        }
+
+        window.exportConfigFile = function() {
+            const token = document.getElementById('gistTokenInput').value.trim();
+            const id = document.getElementById('gistIdInput').value.trim();
+            if (!token || !id) {
+                showToast("凭证数据不全，无法导出", "error");
+                return;
+            }
+
+            const blobObj = { token, id, mode: "gist" };
+            const blob = new Blob([JSON.stringify(blobObj, null, 2)], { type: "application/json" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "car_ledger_config.json";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast("凭证配置文件已安全导出！");
+        }
+
+        window.importConfigFile = function(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (parsed.token && parsed.id) {
+                        document.getElementById('gistTokenInput').value = parsed.token;
+                        document.getElementById('gistIdInput').value = parsed.id;
+                        showToast("一键导入密码配置文件成功！");
+                    } else {
+                        showToast("错误的 JSON 配置文件格式", "error");
+                    }
+                } catch(err) {
+                    showToast("解析配置文件失败", "error");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        window.testAndSyncGist = function() {
+            const token = document.getElementById('gistTokenInput').value.trim();
+            const id = document.getElementById('gistIdInput').value.trim();
+            if (!id) {
+                showToast("Gist ID 必须填写！", "error");
+                return;
+            }
+            initGistSync(token, id, true);
+        };
+
+        window.pushLocalToGist = async function() {
+            const token = document.getElementById('gistTokenInput').value.trim();
+            const id = document.getElementById('gistIdInput').value.trim();
+            if (!token || !id) {
+                showToast("抱歉，上传到云端必须填写 Token，只读状态下无法覆写！", "error");
+                return;
+            }
+            const ok = await uploadLocalToGistBackend(token, id);
+            if (ok) toggleModal('syncModal', false);
+        };
+
+        // =======【3. Firebase 实战模式】=======
+        async function initFirebase() {
+            window.currentSyncMode = 'firebase';
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'car-maintenance-ledger-pro';
+            let firebaseConfig = null;
+            if (typeof __firebase_config !== 'undefined') {
+                try {
+                    firebaseConfig = JSON.parse(__firebase_config);
+                } catch(e) {
+                    console.error("Firebase config parse error", e);
+                }
+            }
+
+            if (firebaseConfig) {
+                try {
+                    const app = initializeApp(firebaseConfig);
+                    window.db = getFirestore(app);
+                    window.auth = getAuth(app);
+
+                    let userCredential;
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        userCredential = await signInWithCustomToken(window.auth, __initial_auth_token);
+                    } else {
+                        userCredential = await signInAnonymously(window.auth);
+                    }
+
+                    window.userId = userCredential.user.uid;
+                    window.isCloudMode = true;
+                    window.isReadOnlyMode = false; // Firebase 前端匿名验证由安全规则拦截
+                    updateLockStatus();
+                    document.getElementById('dbStatusBadge').innerText = "Firebase 实时云端已连接";
+                    document.getElementById('dbStatusBadge').className = "text-[10px] bg-emerald-500 text-white px-1.5 py-0.5 rounded font-bold";
+                    document.getElementById('firebaseConnStatus').innerText = `已成功连接! 匿名 UID: ${window.userId}`;
+                    document.getElementById('firebaseConnStatus').className = "text-[11px] text-emerald-600 font-semibold";
+                    showToast("成功登录云端电子账本 (Firebase)");
+
+                    setupCloudListeners();
+
+                } catch (error) {
+                    console.error("Firebase Auth 故障，自动回滚：", error);
+                    fallbackToLocalWithWarning("Firebase 实例连接失败，已回退至本地模式。");
+                }
+            } else {
+                fallbackToLocalWithWarning("未检测到有效的 Firebase Config 代码凭证，已回滚。");
+            }
+        }
+
+        // Firebase 实时监听器
+        function setupCloudListeners() {
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'car-maintenance-ledger-pro';
+            
+            // 监听车辆列表
+            const carsRef = collection(window.db, 'artifacts', appId, 'users', window.userId, 'cars');
+            onSnapshot(carsRef, (snapshot) => {
+                window.cars = [];
+                snapshot.forEach(doc => {
+                    window.cars.push({ id: doc.id, ...doc.data() });
+                });
+                
+                if (window.cars.length === 0) {
+                    const defaultCarRef = doc(carsRef);
+                    setDoc(defaultCarRef, {
+                        name: '我的爱车',
+                        odo: 65200
+                    });
+                    window.activeCarId = defaultCarRef.id;
+                } else if (!window.activeCarId || !window.cars.find(c => c.id === window.activeCarId)) {
+                    window.activeCarId = window.cars[0].id;
+                }
+                updateUI();
+            }, (error) => {
+                showToast("云端读取车辆故障", "error");
+            });
+
+            // 监听账本记录
+            const recordsRef = collection(window.db, 'artifacts', appId, 'users', window.userId, 'records');
+            onSnapshot(recordsRef, (snapshot) => {
+                window.records = [];
+                snapshot.forEach(doc => {
+                    window.records.push({ id: doc.id, ...doc.data() });
+                });
+                updateUI();
+            }, (error) => {
+                showToast("云端拉取账目失败", "error");
+            });
+        }
+
+
+        // =======【4. 设置存储面板交互】=======
+        window.handleSyncModeChange = function() {
+            const selectMode = document.getElementById('syncModeSelect').value;
+            const gistArea = document.getElementById('gistConfigArea');
+            const firebaseArea = document.getElementById('firebaseConfigArea');
+
+            if (selectMode === 'gist') {
+                gistArea.classList.remove('hidden');
+                firebaseArea.classList.add('hidden');
+            } else if (selectMode === 'firebase') {
+                gistArea.classList.add('hidden');
+                firebaseArea.classList.remove('hidden');
+            } else {
+                gistArea.classList.add('hidden');
+                firebaseArea.classList.add('hidden');
+            }
+        };
+
+        window.saveSyncSettings = function() {
+            const selectMode = document.getElementById('syncModeSelect').value;
+
+            if (selectMode === 'gist') {
+                const token = document.getElementById('gistTokenInput').value.trim();
+                const id = document.getElementById('gistIdInput').value.trim();
+                if (!id) {
+                    showToast("保存失败，Gist ID 必须输入！", "error");
+                    return;
+                }
+                localStorage.setItem('car_ledger_sync_mode', 'gist');
+                localStorage.setItem('car_ledger_gist_token', token);
+                localStorage.setItem('car_ledger_gist_id', id);
+                window.currentSyncMode = 'gist';
+                toggleModal('syncModal', false);
+                initGistSync(token, id, true);
+            } else if (selectMode === 'firebase') {
+                localStorage.setItem('car_ledger_sync_mode', 'firebase');
+                window.currentSyncMode = 'firebase';
+                toggleModal('syncModal', false);
+                initFirebase();
+            } else {
+                localStorage.setItem('car_ledger_sync_mode', 'local');
+                initLocalMode();
+                toggleModal('syncModal', false);
+                showToast("已切换至本地离线存储模式");
+            }
+        };
+
+        // =======【5. 车辆及车库核心引擎】=======
+        window.getActiveCar = function() {
+            return window.cars.find(c => c.id === window.activeCarId);
+        };
+
+        window.switchCar = function(id) {
+            window.activeCarId = id;
+            if (window.currentSyncMode === 'local') {
+                saveToLocalStorage();
+                updateUI();
+            } else if (window.currentSyncMode === 'gist') {
+                if (window.isReadOnlyMode) {
+                    // 只读模式下不允许通过写入同步，仅做本地区段渲染刷新
+                    updateUI();
+                } else {
+                    const token = localStorage.getItem('car_ledger_gist_token');
+                    const gistId = localStorage.getItem('car_ledger_gist_id');
+                    uploadLocalToGistBackend(token, gistId).then(() => {
+                        updateUI();
+                    });
+                }
+            } else {
+                updateUI();
+            }
+            toggleModal('carModal', false);
+            showToast("成功切换至选中车辆");
+        };
+
+        window.saveCar = async function() {
+            if (window.isReadOnlyMode) {
+                showToast("当前处于只读共享模式，无权增加车辆！", "error");
+                return;
+            }
+            const nameInput = document.getElementById('newCarName');
+            const odoInput = document.getElementById('newCarOdo');
+            
+            if (!nameInput.value.trim() || !odoInput.value) {
+                showToast('请完整输入车牌简称和当前仪表盘公里数', 'error');
+                return;
+            }
+
+            const name = nameInput.value.trim();
+            const odo = parseInt(odoInput.value);
+
+            if (window.currentSyncMode === 'firebase' && window.isCloudMode) {
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'car-maintenance-ledger-pro';
+                const carsRef = collection(window.db, 'artifacts', appId, 'users', window.userId, 'cars');
+                await addDoc(carsRef, { name, odo });
+            } else {
+                const newCar = {
+                    id: 'car-' + Date.now(),
+                    name,
+                    odo
+                };
+                window.cars.push(newCar);
+                window.activeCarId = newCar.id;
+                
+                if (window.currentSyncMode === 'gist') {
+                    const token = localStorage.getItem('car_ledger_gist_token');
+                    const gistId = localStorage.getItem('car_ledger_gist_id');
+                    await uploadLocalToGistBackend(token, gistId);
+                } else {
+                    saveToLocalStorage();
+                }
+                updateUI();
+            }
+
+            nameInput.value = '';
+            odoInput.value = '';
+            toggleModal('carModal', false);
+            showToast("成功添加新车并启用");
+        };
+
+        window.deleteCar = function(id, event) {
+            event.stopPropagation();
+            if (window.isReadOnlyMode) {
+                showToast("当前处于只读模式，无权下架车辆档案！", "error");
+                return;
+            }
+            if (window.cars.length <= 1) {
+                showToast('不能删除唯一的车辆！车库必须保留至少一辆车', 'error');
+                return;
+            }
+
+            window.showConfirm("确认删除车辆？", "确定要从系统中清除该车辆档案吗？相关的保养消费记录将被一并永久删除，不可恢复。", async () => {
+                if (window.currentSyncMode === 'firebase' && window.isCloudMode) {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'car-maintenance-ledger-pro';
+                    
+                    const carRecords = window.records.filter(r => r.carId === id);
+                    for (let r of carRecords) {
+                        const recDoc = doc(window.db, 'artifacts', appId, 'users', window.userId, 'records', r.id);
+                        await deleteDoc(recDoc);
+                    }
+
+                    const carDoc = doc(window.db, 'artifacts', appId, 'users', window.userId, 'cars', id);
+                    await deleteDoc(carDoc);
+                } else {
+                    window.records = window.records.filter(r => r.carId !== id);
+                    window.cars = window.cars.filter(c => c.id !== id);
+                    if (window.activeCarId === id) {
+                        window.activeCarId = window.cars[0].id;
+                    }
+                    
+                    if (window.currentSyncMode === 'gist') {
+                        const token = localStorage.getItem('car_ledger_gist_token');
+                        const gistId = localStorage.getItem('car_ledger_gist_id');
+                        await uploadLocalToGistBackend(token, gistId);
+                    } else {
+                        saveToLocalStorage();
+                    }
+                    updateUI();
+                    renderCarModalList();
+                }
+                showToast("成功删除了该车辆档案");
+            });
+        };
+
+        window.promptEditCar = function(id, event) {
+            event.stopPropagation();
+            if (window.isReadOnlyMode) {
+                showToast("当前处于只读模式，无权修改车辆里程与信息！", "error");
+                return;
+            }
+            const car = window.cars.find(c => c.id === id);
+            if (!car) return;
+
+            const newName = prompt(`更新名称/牌号:`, car.name);
+            if (newName === null) return;
+            const newOdo = prompt(`请输入最新总行程公里数(km):`, car.odo);
+            if (newOdo === null) return;
+
+            const finalOdo = parseInt(newOdo);
+            if (newName.trim() && !isNaN(finalOdo)) {
+                if (window.currentSyncMode === 'firebase' && window.isCloudMode) {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'car-maintenance-ledger-pro';
+                    const carDoc = doc(window.db, 'artifacts', appId, 'users', window.userId, 'cars', id);
+                    updateDoc(carDoc, { name: newName.trim(), odo: finalOdo });
+                } else {
+                    car.name = newName.trim();
+                    car.odo = finalOdo;
+                    
+                    if (window.currentSyncMode === 'gist') {
+                        const token = localStorage.getItem('car_ledger_gist_token');
+                        const gistId = localStorage.getItem('car_ledger_gist_id');
+                        uploadLocalToGistBackend(token, gistId);
+                    } else {
+                        saveToLocalStorage();
+                    }
+                    updateUI();
+                    renderCarModalList();
+                }
+                showToast("车辆基础里程信息已刷新");
+            } else {
+                showToast("格式录入错误，保存失败", "error");
+            }
+        };
+
+
+        // =======【6. 模态框通用显隐操作】=======
+        window.toggleModal = function(modalId, show) {
+            const modal = document.getElementById(modalId);
+            const content = modal.querySelector('div');
+            
+            // 每次打开同步模态框时触发联动检查
+            if (modalId === 'syncModal' && show) {
+                handleSyncModeChange(); 
+            }
+
+            if (show) {
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.classList.remove('opacity-0');
+                    content.classList.remove('scale-95');
+                }, 10);
+                if (modalId === 'carModal') renderCarModalList();
+            } else {
+                modal.classList.add('opacity-0');
+                content.classList.add('scale-95');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                }, 300);
+            }
+        };
+
+        function renderCarModalList() {
+            const list = document.getElementById('carList');
+            list.innerHTML = '';
+            window.cars.forEach(c => {
+                const isActive = c.id === window.activeCarId;
+                list.innerHTML += `
+                    <div onclick="switchCar('${c.id}')" class="flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${isActive ? 'border-indigo-600 bg-indigo-50/50' : 'border-slate-100 hover:border-slate-300'}">
+                        <div class="flex items-center space-x-3 truncate">
+                            <span class="w-2 h-2 rounded-full flex-shrink-0 ${isActive ? 'bg-indigo-600' : 'bg-slate-300'}"></span>
+                            <div class="truncate">
+                                <p class="text-xs font-bold text-slate-800 truncate">${c.name}</p>
+                                <p class="text-[10px] text-slate-400">最新仪表盘里程: ${c.odo.toLocaleString()} km</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-2 flex-shrink-0">
+                            <button onclick="promptEditCar('${c.id}', event)" class="p-1 hover:bg-slate-200 text-slate-500 rounded-lg ${window.isReadOnlyMode ? 'hidden' : ''}" title="更新信息与里程">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+                            </button>
+                            <button onclick="deleteCar('${c.id}', event)" class="p-1 hover:bg-rose-100 text-rose-500 rounded-lg ${window.isReadOnlyMode ? 'hidden' : ''}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+
+        // =======【7. 核心业务：面板 UI 同步及提醒逻辑】=======
+        window.updateUI = function() {
+            const currentCar = getActiveCar();
+            if (!currentCar) {
+                document.getElementById('currentCarDisplay').innerText = "暂无激活车辆";
+                return;
+            }
+
+            document.getElementById('currentCarDisplay').innerText = `当前车辆: ${currentCar.name} (${currentCar.odo.toLocaleString()} km)`;
+
+            const carRecords = getActiveRecords();
+
+            let totalCost = 0;
+            carRecords.forEach(r => {
+                totalCost += roundMoney(r.totalCost);
+            });
+            totalCost = roundMoney(totalCost);
+
+            document.getElementById('statTotalCost').innerText = `¥${totalCost.toFixed(2)}`;
+            document.getElementById('statTotalCount').innerText = `${carRecords.length} 次`;
+
+            if (carRecords.length > 0) {
+                const sorted = [...carRecords].sort((a,b) => new Date(b.date) - new Date(a.date));
+                document.getElementById('statLastDate').innerText = `最近一次：${sorted[0].date}`;
+                document.getElementById('statAverageCost').innerText = `¥${(totalCost / carRecords.length).toFixed(2)}`;
+            } else {
+                document.getElementById('statLastDate').innerText = `最近一次：暂无`;
+                document.getElementById('statAverageCost').innerText = `¥0.00`;
+            }
+
+            updateReminders(currentCar, carRecords);
+            window.renderRecordsTable();
+            updateCostChart(carRecords);
+            updateRecycleBinBadge();
+        };
+
+        // 保养预测与指示灯模块
+        function updateReminders(car, carRecords) {
+            const validPredictions = carRecords.filter(r => r.nextMileage || r.nextDate);
+            const dot = document.getElementById('reminderStatusDot');
+            const text = document.getElementById('reminderStatusText');
+            const subtext = document.getElementById('reminderStatusSubtext');
+
+            if (validPredictions.length === 0) {
+                dot.className = "inline-block w-3 h-3 rounded-full bg-slate-400";
+                text.innerText = "暂无提醒预测";
+                text.className = "font-bold text-xs text-slate-500";
+                subtext.innerText = "添加预测下期保养条件后将自动运算";
+                return;
+            }
+
+            let nearestOdoLeft = Infinity;
+            let nearestDateLeft = Infinity;
+            const today = new Date();
+
+            validPredictions.forEach(r => {
+                if (r.nextMileage) {
+                    const diff = r.nextMileage - car.odo;
+                    if (diff > 0 && diff < nearestOdoLeft) nearestOdoLeft = diff;
+                }
+                if (r.nextDate) {
+                    const diffDays = Math.ceil((new Date(r.nextDate) - today) / (1000 * 60 * 60 * 24));
+                    if (diffDays > 0 && diffDays < nearestDateLeft) nearestDateLeft = diffDays;
+                }
+            });
+
+            const hasOdoPrediction = nearestOdoLeft !== Infinity;
+            const hasDatePrediction = nearestDateLeft !== Infinity;
+
+            if (!hasOdoPrediction && !hasDatePrediction) {
+                dot.className = "inline-block w-3 h-3 rounded-full bg-rose-500 animate-pulse";
+                text.innerText = "保养已逾期！";
+                text.className = "font-bold text-xs text-rose-600";
+                const overdueParts = [];
+                const odoOverdue = validPredictions.filter(r => r.nextMileage && r.nextMileage <= car.odo);
+                const dateOverdue = validPredictions.filter(r => r.nextDate && new Date(r.nextDate) <= today);
+                if (odoOverdue.length > 0) overdueParts.push(`里程已超出 ${odoOverdue.length} 条预警`);
+                if (dateOverdue.length > 0) overdueParts.push(`日期已过期 ${dateOverdue.length} 条预警`);
+                subtext.innerText = overdueParts.join("，") + "，请尽快保养";
+                return;
+            }
+
+            const isOdoUrgent = hasOdoPrediction && nearestOdoLeft <= 1000; 
+            const isDateUrgent = hasDatePrediction && nearestDateLeft <= 30;
+
+            if (isOdoUrgent || isDateUrgent) {
+                dot.className = "inline-block w-3 h-3 rounded-full bg-rose-500 animate-pulse";
+                text.innerText = "建议立刻进行保养！";
+                text.className = "font-bold text-xs text-rose-600";
+                
+                let detailStr = [];
+                if (hasOdoPrediction) detailStr.push(`距离建议保养剩 ${nearestOdoLeft} km`);
+                if (hasDatePrediction) detailStr.push(`还剩 ${nearestDateLeft} 天`);
+                subtext.innerText = detailStr.join(" 或 ");
+            } else {
+                dot.className = "inline-block w-3 h-3 rounded-full bg-emerald-500";
+                text.innerText = "车况评级优异";
+                text.className = "font-bold text-xs text-emerald-600";
+                
+                let detailStr = [];
+                if (hasOdoPrediction) detailStr.push(`距离保养还剩 ${nearestOdoLeft} km`);
+                if (hasDatePrediction) detailStr.push(`还能安全开 ${nearestDateLeft} 天`);
+                subtext.innerText = detailStr.join("，");
+            }
+        }
+
+
+        // =======【8. 动态子账单行交互模块】=======
+        let currentItemRows = [];
+
+        function roundMoney(val) {
+            return Math.round(parseFloat(val || 0) * 100) / 100;
+        }
+
+        window.addNewItemRow = function(name = '', cost = '') {
+            const container = document.getElementById('itemizedItemsList');
+            const rowIndex = currentItemRows.length;
+            
+            const div = document.createElement('div');
+            div.className = "flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-100 shadow-xs";
+            div.id = `item-row-${rowIndex}`;
+            div.innerHTML = `
+                <input type="text" placeholder="保养项目名称 (如: 极护机油)" value="${name}" oninput="syncItemData(${rowIndex})" class="item-name-input flex-grow text-xs border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white" ${window.isReadOnlyMode ? 'disabled' : ''}>
+                <input type="number" step="0.01" placeholder="费用 (元)" value="${cost}" oninput="syncItemData(${rowIndex}); calculateDynamicTotal();" class="item-cost-input w-24 text-xs border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white font-semibold text-slate-700" ${window.isReadOnlyMode ? 'disabled' : ''}>
+                <button type="button" onclick="removeItemRow(${rowIndex})" class="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors flex-shrink-0 ${window.isReadOnlyMode ? 'hidden' : ''}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+            `;
+            container.appendChild(div);
+            currentItemRows.push({ name, cost: roundMoney(cost) });
+            calculateDynamicTotal();
+        };
+
+        window.syncItemData = function(index) {
+            const row = document.getElementById(`item-row-${index}`);
+            if (row) {
+                const nameVal = row.querySelector('.item-name-input').value;
+                const costVal = roundMoney(row.querySelector('.item-cost-input').value);
+                currentItemRows[index] = { name: nameVal, cost: costVal };
+            }
+        };
+
+        window.removeItemRow = function(index) {
+            if (window.isReadOnlyMode) return;
+            const row = document.getElementById(`item-row-${index}`);
+            if (row) {
+                row.remove();
+                currentItemRows[index] = null; 
+                calculateDynamicTotal();
+            }
+        };
+
+        window.calculateDynamicTotal = function() {
+            let sum = 0;
+            currentItemRows.forEach(item => {
+                if (item) {
+                    sum += roundMoney(item.cost);
+                }
+            });
+            document.getElementById('totalCostDisplay').innerText = `¥${roundMoney(sum).toFixed(2)}`;
+        };
+
+
+        // =======【9. 渲染卡片卡列表】=======
+        window.renderRecordsTable = function() {
+            const container = document.getElementById('recordsContainer');
+            const empty = document.getElementById('emptyState');
+            const filterValue = document.getElementById('categoryFilter').value;
+
+            let carRecords = getActiveRecords();
+            if (filterValue !== 'All') {
+                carRecords = carRecords.filter(r => r.category === filterValue);
+            }
+
+            carRecords.sort((a,b) => new Date(b.date) - new Date(a.date));
+
+            const totalCount = carRecords.length;
+            const totalPages = Math.max(1, Math.ceil(totalCount / window.pageSize));
+            if (window.currentPage > totalPages) window.currentPage = totalPages;
+            const startIdx = (window.currentPage - 1) * window.pageSize;
+            const pageRecords = carRecords.slice(startIdx, startIdx + window.pageSize);
+
+            container.innerHTML = '';
+
+            if (totalCount === 0) {
+                empty.classList.remove('hidden');
+                document.getElementById('paginationContainer').classList.add('hidden');
+                document.getElementById('batchActionBar').classList.add('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+
+            pageRecords.forEach(r => {
+                const isSelected = window.selectedRecordIds.has(r.id);
+                let itemsHTML = '';
+                if (r.items && r.items.length > 0) {
+                    itemsHTML = `<div class="mt-2 pt-2 border-t border-slate-100/60 space-y-1">`;
+                    r.items.forEach(it => {
+                        itemsHTML += `
+                            <div class="flex justify-between items-center text-[11px] text-slate-500">
+                                <span class="flex items-center gap-1">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+                                    ${it.name || '未命名项目'}
+                                </span>
+                                <span class="font-medium text-slate-600">¥${roundMoney(it.cost).toFixed(2)}</span>
+                            </div>
+                        `;
+                    });
+                    itemsHTML += `</div>`;
+                }
+
+                const checkboxHTML = window.batchMode
+                    ? `<input type="checkbox" class="batch-checkbox mr-2" ${isSelected ? 'checked' : ''} onchange="toggleRecordSelection('${r.id}')" onclick="event.stopPropagation()">`
+                    : '';
+
+                container.innerHTML += `
+                    <div class="bg-white rounded-2xl border border-slate-150 p-4 shadow-xs hover:shadow-md transition-all ${isSelected ? 'card-selected' : ''}">
+                        <div class="flex flex-col sm:flex-row justify-between sm:items-start gap-2">
+                            <div class="space-y-1 flex-grow">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    ${checkboxHTML}
+                                    <span class="inline-block px-2 py-0.5 text-[10px] font-bold rounded-lg ${getCategoryBadgeClass(r.category)}">
+                                        ${r.category}
+                                    </span>
+                                    <span class="text-xs font-bold text-slate-600">${r.date}</span>
+                                    <span class="text-[11px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">${r.mileage.toLocaleString()} km</span>
+                                </div>
+                                <p class="text-xs text-slate-400 flex items-center gap-1 pt-1">
+                                    <span>📍 施工地: ${r.shop || '自行施工DIY'}</span>
+                                    ${r.notes ? `<span class="text-indigo-500 font-medium">/ 备注: ${r.notes}</span>` : ''}
+                                </p>
+                            </div>
+                            <div class="flex items-center justify-between sm:justify-end gap-3 flex-shrink-0 mt-2 sm:mt-0">
+                                <div class="text-left sm:text-right">
+                                    <span class="text-[10px] text-slate-400 block">合计实付</span>
+                                    <span class="text-sm font-bold text-indigo-700">¥${roundMoney(r.totalCost).toFixed(2)}</span>
+                                </div>
+                                <div class="flex items-center space-x-1 ${window.isReadOnlyMode || window.batchMode ? 'hidden' : ''}">
+                                    <button onclick="editRecord('${r.id}')" class="text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-colors" title="编辑">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                    </button>
+                                    <button onclick="deleteRecord('${r.id}')" class="text-rose-600 hover:bg-rose-50 p-2 rounded-xl transition-colors" title="删除">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        ${itemsHTML}
+                    </div>
+                `;
+            });
+
+            renderPagination(totalCount, totalPages);
+            updateBatchActionBar();
+        }
+
+        function getCategoryBadgeClass(category) {
+            switch(category) {
+                case '常规保养': return 'bg-blue-50 text-blue-700';
+                case '大保养': return 'bg-amber-50 text-amber-700';
+                case '专项维修': return 'bg-rose-50 text-rose-700';
+                case '美容美化': return 'bg-purple-50 text-purple-700';
+                default: return 'bg-slate-50 text-slate-700';
+            }
+        }
+
+
+        // =======【10. 表单提交、保存、编辑、删除等操作】=======
+        window.handleFormSubmit = async function(event) {
+            event.preventDefault();
+            if (window.isReadOnlyMode) {
+                showToast("当前处于只读模式，无权进行编辑写入！", "error");
+                return;
+            }
+
+            if (!validateForm()) return;
+
+            const finalItems = currentItemRows.filter(it => it !== null && it.name.trim() !== '');
+            let calculatedTotal = 0;
+            finalItems.forEach(it => {
+                calculatedTotal += roundMoney(it.cost);
+            });
+            calculatedTotal = roundMoney(calculatedTotal);
+
+            const recordId = document.getElementById('editRecordId').value;
+            const isEdit = recordId !== '';
+
+            const payload = {
+                carId: window.activeCarId,
+                date: document.getElementById('recordDate').value,
+                mileage: parseInt(document.getElementById('recordMileage').value),
+                category: document.getElementById('recordCategory').value,
+                items: finalItems,
+                totalCost: calculatedTotal,
+                nextMileage: parseInt(document.getElementById('recordNextMileage').value) || null,
+                nextDate: document.getElementById('recordNextDate').value || null,
+                shop: document.getElementById('recordShop').value.trim(),
+                notes: document.getElementById('recordNotes').value.trim()
+            };
+
+            const currentCar = getActiveCar();
+            if (currentCar && payload.mileage > currentCar.odo) {
+                if (window.currentSyncMode === 'firebase' && window.isCloudMode) {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'car-maintenance-ledger-pro';
+                    const carDoc = doc(window.db, 'artifacts', appId, 'users', window.userId, 'cars', window.activeCarId);
+                    await updateDoc(carDoc, { odo: payload.mileage });
+                } else {
+                    currentCar.odo = payload.mileage;
+                }
+            }
+
+            if (window.currentSyncMode === 'firebase' && window.isCloudMode) {
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'car-maintenance-ledger-pro';
+                if (isEdit) {
+                    const docRef = doc(window.db, 'artifacts', appId, 'users', window.userId, 'records', recordId);
+                    await setDoc(docRef, payload, { merge: true });
+                } else {
+                    const colRef = collection(window.db, 'artifacts', appId, 'users', window.userId, 'records');
+                    await addDoc(colRef, payload);
+                }
+            } else {
+                const prevRecords = JSON.parse(JSON.stringify(window.records));
+                try {
+                    if (isEdit) {
+                        const idx = window.records.findIndex(r => r.id === recordId);
+                        if (idx !== -1) {
+                            const oldRecord = window.records[idx];
+                            window.records[idx] = { id: recordId, ...payload };
+                            addOperationLog('edit', recordId, `修改前: ${getRecordSummary(oldRecord)}`);
+                        }
+                    } else {
+                        window.records.push({ id: 'rec-' + Date.now(), ...payload });
+                    }
+
+                    if (window.currentSyncMode === 'gist') {
+                        const token = localStorage.getItem('car_ledger_gist_token');
+                        const gistId = localStorage.getItem('car_ledger_gist_id');
+                        await uploadLocalToGistBackend(token, gistId);
+                    } else {
+                        saveToLocalStorage();
+                    }
+                    updateUI();
+                } catch (err) {
+                    window.records = prevRecords;
+                    saveToLocalStorage();
+                    showToast("保存失败，数据已回滚至修改前状态", "error");
+                    console.error(err);
+                    return;
+                }
+            }
+
+            resetForm();
+            showToast(isEdit ? "保养档案修改已同步" : "成功录入新维保条目");
+        };
+
+        window.editRecord = function(id) {
+            if (window.isReadOnlyMode) {
+                showToast("当前处于只读模式，无权进行编辑写入！", "error");
+                return;
+            }
+            if (window.batchMode) {
+                showToast("请先退出批量管理模式再编辑", "warning");
+                return;
+            }
+            const r = window.records.find(rec => rec.id === id);
+            if (!r) return;
+
+            backupFormState();
+
+            document.getElementById('editRecordId').value = r.id;
+            document.getElementById('recordDate').value = r.date;
+            document.getElementById('recordMileage').value = r.mileage;
+            document.getElementById('recordCategory').value = r.category;
+            document.getElementById('recordNextMileage').value = r.nextMileage || '';
+            document.getElementById('recordNextDate').value = r.nextDate || '';
+            document.getElementById('recordShop').value = r.shop || '';
+            document.getElementById('recordNotes').value = r.notes || '';
+
+            document.getElementById('itemizedItemsList').innerHTML = '';
+            currentItemRows = [];
+            
+            if (r.items && r.items.length > 0) {
+                r.items.forEach(it => {
+                    addNewItemRow(it.name, it.cost);
+                });
+            } else {
+                addNewItemRow('', '');
+            }
+
+            document.getElementById('recordFormCard').scrollIntoView({ behavior: 'smooth' });
+            document.getElementById('formTitle').innerText = "编辑保养账单";
+            document.getElementById('submitBtn').innerText = "确认修改并同步";
+            document.getElementById('formHeaderIcon').className = "p-1.5 bg-blue-50 text-blue-700 rounded-xl";
+        };
+
+        window.deleteRecord = function(id) {
+            if (window.isReadOnlyMode) {
+                showToast("当前处于只读模式，无权进行删改操作！", "error");
+                return;
+            }
+            const r = window.records.find(rec => rec.id === id);
+            if (!r) return;
+
+            window.showConfirm("确认删除保养记录？", `即将移入回收站: ${getRecordSummary(r)}\n删除后可从回收站恢复。`, async () => {
+                if (window.currentSyncMode === 'firebase' && window.isCloudMode) {
+                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'car-maintenance-ledger-pro';
+                    const docRef = doc(window.db, 'artifacts', appId, 'users', window.userId, 'records', id);
+                    await updateDoc(docRef, { deletedAt: new Date().toISOString(), deletedBy: '车主' });
+                    r.deletedAt = new Date().toISOString();
+                    r.deletedBy = '车主';
+                    await recalculateCarOdo();
+                    updateUI();
+                } else {
+                    r.deletedAt = new Date().toISOString();
+                    r.deletedBy = '车主';
+                    addOperationLog('delete', id, getRecordSummary(r));
+
+                    if (window.currentSyncMode === 'gist') {
+                        const token = localStorage.getItem('car_ledger_gist_token');
+                        const gistId = localStorage.getItem('car_ledger_gist_id');
+                        await uploadLocalToGistBackend(token, gistId);
+                    } else {
+                        saveToLocalStorage();
+                    }
+                    await recalculateCarOdo();
+                    updateUI();
+                }
+                showToast("记录已移入回收站，可随时恢复");
+            });
+        };
+
+        window.cancelEditing = function() {
+            if (window.formBackup) {
+                restoreFormBackup();
+                document.getElementById('formTitle').innerText = "编辑保养账单";
+                document.getElementById('submitBtn').innerText = "确认修改并同步";
+                document.getElementById('formHeaderIcon').className = "p-1.5 bg-blue-50 text-blue-700 rounded-xl";
+                showToast("已恢复编辑前的表单内容");
+            } else {
+                resetForm();
+                showToast("已恢复新建模式");
+            }
+        };
+
+        window.resetForm = function() {
+            document.getElementById('editRecordId').value = '';
+            document.getElementById('recordDate').value = new Date().toISOString().split('T')[0];
+            document.getElementById('recordMileage').value = '';
+            document.getElementById('recordCategory').selectedIndex = 0;
+            document.getElementById('recordNextMileage').value = '';
+            document.getElementById('recordNextDate').value = '';
+            document.getElementById('recordShop').value = '';
+            document.getElementById('recordNotes').value = '';
+            
+            document.getElementById('itemizedItemsList').innerHTML = '';
+            currentItemRows = [];
+            
+            // 预设默认行方便记账
+            addNewItemRow('更换全合成机油与滤清器', '');
+            addNewItemRow('常规车辆健康安全检测工时费', '');
+
+            document.getElementById('formTitle').innerText = "新建保养账单";
+            document.getElementById('submitBtn').innerText = "保存账单";
+            document.getElementById('formHeaderIcon').className = "p-1.5 bg-indigo-50 text-indigo-700 rounded-xl";
+        };
+
+
+        // =======【11. 数据可视化分析 (饼图) 】=======
+        function updateCostChart(carRecords) {
+            const container = document.getElementById('chartEmptyState');
+            if (carRecords.length === 0) {
+                container.classList.remove('hidden');
+                if (window.costChartInstance) {
+                    window.costChartInstance.destroy();
+                    window.costChartInstance = null;
+                }
+                return;
+            }
+            container.classList.add('hidden');
+
+            const categories = { '常规保养': 0, '大保养': 0, '专项维修': 0, '美容美化': 0 };
+            carRecords.forEach(r => {
+                if (categories[r.category] !== undefined) {
+                    categories[r.category] += roundMoney(r.totalCost);
+                }
+            });
+
+            const ctx = document.getElementById('costChart').getContext('2d');
+            if (window.costChartInstance) {
+                window.costChartInstance.data.datasets[0].data = Object.values(categories);
+                window.costChartInstance.update();
+            } else {
+                window.costChartInstance = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: Object.keys(categories),
+                        datasets: [{
+                            data: Object.values(categories),
+                            backgroundColor: ['#3b82f6', '#f59e0b', '#f43f5e', '#a855f7'],
+                            borderWidth: 2,
+                            borderColor: '#ffffff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    boxWidth: 8,
+                                    font: { size: 10 }
+                                }
+                            }
+                        },
+                        cutout: '70%'
+                    }
+                });
+            }
+        }
+
+
+        // =======【12. 完美导出标准 Excel (CSV 文件) 】=======
+        window.exportToExcel = function() {
+            const currentCar = getActiveCar();
+            const carRecords = getActiveRecords();
+
+            if (carRecords.length === 0) {
+                showToast('没有任何记录可供导出！', 'error');
+                return;
+            }
+
+            const headers = [
+                "所属爱车/车牌", "保养日期", "保养里程(km)", "保养分类", "项目明细", 
+                "实付总价(元)", "建议下期公里数", "建议下期日期", "服务商/施工店", "随车备注"
+            ];
+
+            const rows = carRecords.map(r => {
+                const itemsStr = r.items ? r.items.map(it => `${it.name}(¥${it.cost})`).join(" | ") : '';
+                return [
+                    currentCar.name,
+                    r.date,
+                    r.mileage,
+                    r.category,
+                    `"${itemsStr.replace(/"/g, '""')}"`,
+                    roundMoney(r.totalCost).toFixed(2),
+                    r.nextMileage || '',
+                    r.nextDate || '',
+                    `"${(r.shop || '').replace(/"/g, '""')}"`,
+                    `"${(r.notes || '').replace(/"/g, '""')}"`
+                ];
+            });
+
+            const BOM = "\ufeff";
+            let csvContent = BOM + headers.join(",") + "\n";
+            rows.forEach(rowArray => {
+                csvContent += rowArray.join(",") + "\r\n";
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `${currentCar.name}_保养电子对账单.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast("Excel文件已导出，打开表格开始对账吧！");
+        };
+
+
+        // =======【13. 批量管理模式】=======
+        window.toggleBatchMode = function() {
+            window.batchMode = !window.batchMode;
+            window.selectedRecordIds = new Set();
+            const btn = document.getElementById('batchModeBtn');
+            if (window.batchMode) {
+                btn.className = "bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3 py-2 rounded-xl font-semibold transition-colors flex items-center space-x-1";
+                btn.querySelector('span').innerText = "退出批量";
+            } else {
+                btn.className = "bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs px-3 py-2 rounded-xl font-semibold transition-colors flex items-center space-x-1";
+                btn.querySelector('span').innerText = "批量管理";
+            }
+            window.renderRecordsTable();
+        };
+
+        window.toggleRecordSelection = function(id) {
+            if (window.selectedRecordIds.has(id)) {
+                window.selectedRecordIds.delete(id);
+            } else {
+                window.selectedRecordIds.add(id);
+            }
+            window.renderRecordsTable();
+        };
+
+        window.selectAllRecords = function() {
+            const filterValue = document.getElementById('categoryFilter').value;
+            let carRecords = getActiveRecords();
+            if (filterValue !== 'All') {
+                carRecords = carRecords.filter(r => r.category === filterValue);
+            }
+            carRecords.sort((a,b) => new Date(b.date) - new Date(a.date));
+            const startIdx = (window.currentPage - 1) * window.pageSize;
+            const pageRecords = carRecords.slice(startIdx, startIdx + window.pageSize);
+
+            const allSelected = pageRecords.every(r => window.selectedRecordIds.has(r.id));
+            if (allSelected) {
+                pageRecords.forEach(r => window.selectedRecordIds.delete(r.id));
+            } else {
+                pageRecords.forEach(r => window.selectedRecordIds.add(r.id));
+            }
+            window.renderRecordsTable();
+        };
+
+        window.batchDeleteRecords = function() {
+            if (window.selectedRecordIds.size === 0) {
+                showToast("请先选择要删除的记录", "warning");
+                return;
+            }
+            const count = window.selectedRecordIds.size;
+            window.showConfirm("确认批量删除？", `即将把 ${count} 条记录移入回收站，删除后可从回收站恢复。`, async () => {
+                const ids = [...window.selectedRecordIds];
+                const summaries = [];
+                ids.forEach(id => {
+                    const r = window.records.find(rec => rec.id === id);
+                    if (r) {
+                        r.deletedAt = new Date().toISOString();
+                        r.deletedBy = '车主';
+                        summaries.push(getRecordSummary(r));
+                    }
+                });
+                addOperationLog('batch_delete', ids.join(','), `批量删除 ${count} 条: ${summaries.slice(0, 3).join('; ')}${summaries.length > 3 ? '...' : ''}`);
+
+                if (window.currentSyncMode === 'gist') {
+                    const token = localStorage.getItem('car_ledger_gist_token');
+                    const gistId = localStorage.getItem('car_ledger_gist_id');
+                    await uploadLocalToGistBackend(token, gistId);
+                } else {
+                    saveToLocalStorage();
+                }
+                await recalculateCarOdo();
+                window.selectedRecordIds = new Set();
+                window.batchMode = false;
+                const btn = document.getElementById('batchModeBtn');
+                btn.className = "bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs px-3 py-2 rounded-xl font-semibold transition-colors flex items-center space-x-1";
+                btn.querySelector('span').innerText = "批量管理";
+                updateUI();
+                showToast(`已将 ${count} 条记录移入回收站`);
+            });
+        };
+
+        function updateBatchActionBar() {
+            const bar = document.getElementById('batchActionBar');
+            const countDisplay = document.getElementById('selectedCountDisplay');
+            if (window.batchMode) {
+                bar.classList.remove('hidden');
+                countDisplay.innerText = window.selectedRecordIds.size;
+            } else {
+                bar.classList.add('hidden');
+            }
+        }
+
+
+        // =======【14. 回收站功能】=======
+        window.restoreRecord = async function(id) {
+            const r = window.records.find(rec => rec.id === id);
+            if (!r) return;
+
+            if (window.currentSyncMode === 'firebase' && window.isCloudMode) {
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'car-maintenance-ledger-pro';
+                const docRef = doc(window.db, 'artifacts', appId, 'users', window.userId, 'records', id);
+                await updateDoc(docRef, { deletedAt: null, deletedBy: null });
+                delete r.deletedAt;
+                delete r.deletedBy;
+                await recalculateCarOdo();
+                updateUI();
+                renderRecycleBinList();
+            } else {
+                delete r.deletedAt;
+                delete r.deletedBy;
+                addOperationLog('restore', id, getRecordSummary(r));
+
+                if (window.currentSyncMode === 'gist') {
+                    const token = localStorage.getItem('car_ledger_gist_token');
+                    const gistId = localStorage.getItem('car_ledger_gist_id');
+                    await uploadLocalToGistBackend(token, gistId);
+                } else {
+                    saveToLocalStorage();
+                }
+                await recalculateCarOdo();
+                updateUI();
+                renderRecycleBinList();
+            }
+            showToast("记录已成功恢复");
+        };
+
+        window.permanentDeleteRecord = function(id) {
+            const r = window.records.find(rec => rec.id === id);
+            if (!r) return;
+
+            window.showConfirm("永久删除？", `此操作不可逆！将永久删除: ${getRecordSummary(r)}`, async () => {
+                addOperationLog('permanent_delete', id, `永久删除: ${getRecordSummary(r)}`);
+                window.records = window.records.filter(rec => rec.id !== id);
+
+                if (window.currentSyncMode === 'gist') {
+                    const token = localStorage.getItem('car_ledger_gist_token');
+                    const gistId = localStorage.getItem('car_ledger_gist_id');
+                    await uploadLocalToGistBackend(token, gistId);
+                } else {
+                    saveToLocalStorage();
+                }
+                await recalculateCarOdo();
+                updateUI();
+                renderRecycleBinList();
+                showToast("记录已永久删除");
+            });
+        };
+
+        window.emptyRecycleBin = function() {
+            const deleted = getDeletedRecords();
+            if (deleted.length === 0) {
+                showToast("回收站已经是空的", "warning");
+                return;
+            }
+            window.showConfirm("清空回收站？", `将永久删除 ${deleted.length} 条记录，此操作不可逆！`, async () => {
+                addOperationLog('permanent_delete', 'batch', `清空回收站: 永久删除 ${deleted.length} 条记录`);
+                const deletedIds = new Set(deleted.map(r => r.id));
+                window.records = window.records.filter(r => !deletedIds.has(r.id));
+
+                if (window.currentSyncMode === 'gist') {
+                    const token = localStorage.getItem('car_ledger_gist_token');
+                    const gistId = localStorage.getItem('car_ledger_gist_id');
+                    await uploadLocalToGistBackend(token, gistId);
+                } else {
+                    saveToLocalStorage();
+                }
+                await recalculateCarOdo();
+                updateUI();
+                renderRecycleBinList();
+                showToast("回收站已清空");
+            });
+        };
+
+        function updateRecycleBinBadge() {
+            const count = getDeletedRecords().length;
+            const badge = document.getElementById('recycleBinCount');
+            const modalCount = document.getElementById('recycleBinModalCount');
+            const emptyBtn = document.getElementById('emptyRecycleBinBtn');
+            if (count > 0) {
+                badge.classList.remove('hidden');
+                badge.innerText = count;
+            } else {
+                badge.classList.add('hidden');
+            }
+            if (modalCount) modalCount.innerText = count;
+            if (emptyBtn) emptyBtn.classList.toggle('hidden', count === 0);
+        }
+
+        function renderRecycleBinList() {
+            const list = document.getElementById('recycleBinList');
+            const empty = document.getElementById('recycleBinEmpty');
+            const deleted = getDeletedRecords();
+
+            updateRecycleBinBadge();
+
+            if (!list) return;
+
+            list.innerHTML = '';
+            if (deleted.length === 0) {
+                empty.classList.remove('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+
+            deleted.sort((a,b) => new Date(b.deletedAt) - new Date(a.deletedAt));
+
+            deleted.forEach(r => {
+                const deletedTime = r.deletedAt ? new Date(r.deletedAt).toLocaleString('zh-CN') : '未知';
+                list.innerHTML += `
+                    <div class="recycle-card bg-white rounded-xl border border-slate-150 p-3 shadow-xs">
+                        <div class="flex justify-between items-start gap-2">
+                            <div class="space-y-1 flex-grow min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="inline-block px-2 py-0.5 text-[10px] font-bold rounded-lg ${getCategoryBadgeClass(r.category)}">${r.category}</span>
+                                    <span class="text-xs font-bold text-slate-600">${r.date}</span>
+                                    <span class="text-[11px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">${r.mileage.toLocaleString()} km</span>
+                                    <span class="text-sm font-bold text-indigo-700">¥${roundMoney(r.totalCost).toFixed(2)}</span>
+                                </div>
+                                <p class="text-[10px] text-slate-400">删除时间: ${deletedTime} | 操作人: ${r.deletedBy || '未知'}</p>
+                            </div>
+                            <div class="flex items-center space-x-1 flex-shrink-0">
+                                <button onclick="restoreRecord('${r.id}')" class="text-emerald-600 hover:bg-emerald-50 p-2 rounded-xl transition-colors" title="恢复">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                </button>
+                                <button onclick="permanentDeleteRecord('${r.id}')" class="text-rose-600 hover:bg-rose-50 p-2 rounded-xl transition-colors" title="永久删除">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+
+        // =======【15. 操作日志功能】=======
+        window.clearOperationLogs = function() {
+            window.showConfirm("清空操作日志？", "清空后将无法查看历史操作记录。", () => {
+                window.operationLogs = [];
+                saveToLocalStorage();
+                renderOperationLogList();
+                showToast("操作日志已清空");
+            });
+        };
+
+        function renderOperationLogList() {
+            const list = document.getElementById('operationLogList');
+            const empty = document.getElementById('operationLogEmpty');
+            if (!list) return;
+
+            list.innerHTML = '';
+            if (window.operationLogs.length === 0) {
+                empty.classList.remove('hidden');
+                return;
+            }
+            empty.classList.add('hidden');
+
+            window.operationLogs.slice(0, 100).forEach(log => {
+                const time = new Date(log.timestamp).toLocaleString('zh-CN');
+                let actionLabel = '';
+                let logClass = '';
+                switch(log.action) {
+                    case 'delete': actionLabel = '删除'; logClass = 'log-delete'; break;
+                    case 'batch_delete': actionLabel = '批量删除'; logClass = 'log-batch'; break;
+                    case 'restore': actionLabel = '恢复'; logClass = 'log-restore'; break;
+                    case 'permanent_delete': actionLabel = '永久删除'; logClass = 'log-delete'; break;
+                    case 'edit': actionLabel = '修改'; logClass = 'log-edit'; break;
+                    default: actionLabel = log.action; logClass = '';
+                }
+                list.innerHTML += `
+                    <div class="log-entry ${logClass}">
+                        <div class="flex items-center gap-2 mb-0.5">
+                            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                log.action === 'delete' || log.action === 'permanent_delete' || log.action === 'batch_delete' ? 'bg-rose-50 text-rose-700' :
+                                log.action === 'restore' ? 'bg-emerald-50 text-emerald-700' :
+                                'bg-blue-50 text-blue-700'
+                            }">${actionLabel}</span>
+                            <span class="text-[10px] text-slate-400">${time}</span>
+                            <span class="text-[10px] text-slate-300">|</span>
+                            <span class="text-[10px] text-slate-500">操作人: ${log.operator}</span>
+                        </div>
+                        <p class="text-[11px] text-slate-600 leading-relaxed">${log.recordSummary}</p>
+                    </div>
+                `;
+            });
+        }
+
+
+        // =======【16. 分页渲染引擎】=======
+        function renderPagination(totalCount, totalPages) {
+            const container = document.getElementById('paginationContainer');
+            if (totalPages <= 1) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+            container.innerHTML = '';
+
+            const info = document.createElement('span');
+            info.className = 'text-[10px] text-slate-400 mr-3';
+            info.innerText = `共 ${totalCount} 条`;
+            container.appendChild(info);
+
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'pagination-btn';
+            prevBtn.innerHTML = '&lsaquo;';
+            prevBtn.disabled = window.currentPage <= 1;
+            prevBtn.onclick = () => { window.currentPage--; window.renderRecordsTable(); };
+            container.appendChild(prevBtn);
+
+            let startPage = Math.max(1, window.currentPage - 2);
+            let endPage = Math.min(totalPages, startPage + 4);
+            if (endPage - startPage < 4) startPage = Math.max(1, endPage - 4);
+
+            for (let p = startPage; p <= endPage; p++) {
+                const btn = document.createElement('button');
+                btn.className = `pagination-btn ${p === window.currentPage ? 'active' : ''}`;
+                btn.innerText = p;
+                btn.onclick = () => { window.currentPage = p; window.renderRecordsTable(); };
+                container.appendChild(btn);
+            }
+
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'pagination-btn';
+            nextBtn.innerHTML = '&rsaquo;';
+            nextBtn.disabled = window.currentPage >= totalPages;
+            nextBtn.onclick = () => { window.currentPage++; window.renderRecordsTable(); };
+            container.appendChild(nextBtn);
+        }
+
+
+        // =======【17. 弹窗打开时渲染回收站/日志内容】=======
+        const _origToggleModal = window.toggleModal;
+        window.toggleModal = function(modalId, show) {
+            _origToggleModal(modalId, show);
+            if (show) {
+                if (modalId === 'recycleBinModal') renderRecycleBinList();
+                if (modalId === 'operationLogModal') renderOperationLogList();
+            }
+        };
+
+    </script>
+</body>
+</html>
